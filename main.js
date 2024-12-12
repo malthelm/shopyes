@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials, InteractionType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, InteractionType, EmbedBuilder } from 'discord.js';
 import { config } from 'dotenv';
 import mongoose from 'mongoose';
 import ProxyManager from './src/utils/proxy_manager.js';
@@ -25,22 +25,74 @@ const client = new Client({
 // Handle interactions (slash commands)
 client.on('interactionCreate', async interaction => {
     try {
-        Logger.info(`Received interaction: ${interaction.commandName}`);
-        
         if (!interaction.isCommand()) return;
 
+        Logger.info(`Received command: ${interaction.commandName}`);
+
         if (interaction.commandName === 'ping') {
-            await interaction.reply('Pong! 🏓');
+            const latency = client.ws.ping;
+            const embed = new EmbedBuilder()
+                .setColor('#00ff00')
+                .setTitle('🏓 Pong!')
+                .addFields(
+                    { name: 'Bot Latency', value: `${latency}ms`, inline: true },
+                    { name: 'Status', value: '✅ Online', inline: true }
+                )
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [embed] });
+            Logger.info(`Ping command responded with ${latency}ms latency`);
         }
 
         if (interaction.commandName === 'test') {
-            await interaction.reply('Bot is working! ✅');
+            await interaction.deferReply();
+            Logger.info('Running system check...');
+            
+            const checks = await runSystemCheck();
+            
+            const embed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('System Status Check')
+                .addFields(
+                    { 
+                        name: 'Proxy System', 
+                        value: checks.proxy ? '✅ Working' : '❌ Failed',
+                        inline: true 
+                    },
+                    { 
+                        name: 'Discord Connection', 
+                        value: checks.discord ? '✅ Connected' : '❌ Disconnected',
+                        inline: true 
+                    },
+                    { 
+                        name: 'Database', 
+                        value: checks.database ? '✅ Connected' : '❌ Disconnected',
+                        inline: true 
+                    },
+                    {
+                        name: 'Bot Latency',
+                        value: `${client.ws.ping}ms`,
+                        inline: true
+                    },
+                    {
+                        name: 'Uptime',
+                        value: `${Math.floor(client.uptime / 60000)} minutes`,
+                        inline: true
+                    }
+                )
+                .setFooter({ text: 'Vinted Bot Status' })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+            Logger.info('System check completed and results sent');
         }
     } catch (error) {
         Logger.error('Error handling interaction:', error);
-        // Try to respond with error message if we haven't responded yet
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: 'There was an error processing your command!', ephemeral: true });
+            await interaction.reply({ 
+                content: 'There was an error processing your command!', 
+                ephemeral: true 
+            });
         }
     }
 });
@@ -80,18 +132,31 @@ client.once('ready', async () => {
         const commands = [
             {
                 name: 'ping',
-                description: 'Replies with Pong!'
+                description: 'Check bot latency and status'
             },
             {
                 name: 'test',
-                description: 'Test if the bot is working'
+                description: 'Run a complete system check'
             }
         ];
 
-        await client.application.commands.set(commands);
-        Logger.info('Slash commands registered successfully');
+        Logger.info('Starting command registration...');
+        Logger.info(`Commands to register: ${commands.map(cmd => cmd.name).join(', ')}`);
+
+        try {
+            const registeredCommands = await client.application.commands.set(commands);
+            Logger.info(`Successfully registered ${registeredCommands.size} commands:`);
+            registeredCommands.forEach(cmd => {
+                Logger.info(`- /${cmd.name}: ${cmd.description}`);
+            });
+        } catch (registerError) {
+            Logger.error('Failed to register commands:', registerError);
+            throw registerError;
+        }
+
     } catch (error) {
         Logger.error('Error in ready event:', error);
+        Logger.error('Stack trace:', error.stack);
     }
 });
 
@@ -135,6 +200,51 @@ async function testProxy() {
         Logger.error('Proxy test failed:', error);
         return false;
     }
+}
+
+async function runSystemCheck() {
+    Logger.info('Starting system check...');
+    
+    const checks = {
+        proxy: false,
+        discord: false,
+        database: false
+    };
+
+    // Test proxy
+    try {
+        Logger.info('Testing proxy system...');
+        const proxy = ProxyManager.getNextProxy();
+        if (proxy) {
+            checks.proxy = true;
+            Logger.info('Proxy check passed');
+        }
+    } catch (error) {
+        Logger.error('Proxy check failed:', error);
+    }
+
+    // Test Discord
+    try {
+        Logger.info('Testing Discord connection...');
+        checks.discord = client.ws.ping !== undefined;
+        Logger.info(`Discord check ${checks.discord ? 'passed' : 'failed'}`);
+    } catch (error) {
+        Logger.error('Discord check failed:', error);
+    }
+
+    // Test Database (if you're using MongoDB)
+    try {
+        Logger.info('Testing database connection...');
+        if (mongoose.connection) {
+            checks.database = mongoose.connection.readyState === 1;
+            Logger.info(`Database check ${checks.database ? 'passed' : 'failed'}`);
+        }
+    } catch (error) {
+        Logger.error('Database check failed:', error);
+    }
+
+    Logger.info('System check completed');
+    return checks;
 }
 
 // Error handling

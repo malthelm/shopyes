@@ -21,19 +21,21 @@ services:
     pull_policy: never
 
   mongodb:
-    image: quay.io/mongodb/mongodb-community-server:latest
     container_name: mongodb_vinted_public
-    command: mongod --port 27018
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    environment:
+      - MONGODB_INITDB_ROOT_USERNAME=vintedAdmin
+      - MONGODB_INITDB_ROOT_PASSWORD=yourSecurePassword123
     ports:
-      - "127.0.0.1:27018:27018"
+      - "27018:27018"
     volumes:
       - mongodb_data_container:/data/db
     networks:
       - vinted-network
-    pull_policy: if_not_present
-
-volumes:
-  mongodb_data_container:
 
 networks:
   vinted-network:
+    driver: bridge
+
+volumes:
+  mongodb_data_container:

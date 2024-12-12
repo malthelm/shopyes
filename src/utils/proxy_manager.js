@@ -1,109 +1,85 @@
-import { SocksProxyAgent } from 'socks-proxy-agent';
+import fs from 'fs/promises';
+import path from 'path';
 import Logger from './logger.js';
-import { listProxies, Proxy } from './proxies.js';
 import ConfigurationManager from './config_manager.js';
-import fs from 'fs';
 
-const proxy_settings = ConfigurationManager.getProxiesConfig
-
-/**
- * Static class for managing proxy settings and making HTTP requests with SOCKS authentication.
- */
 class ProxyManager {
-    static proxyConfig = null;
-    static proxies = [];
-    static proxiesLoaded = false;
-    static currentProxyIndex = 0;
-    static proxiesOnCooldown = [];
+    constructor() {
+        this.proxies = [];
+        this.currentIndex = 0;
+        this.isWebshare = ConfigurationManager.get('USE_WEBSHARE') === '1';
+        this.webshareKey = ConfigurationManager.get('WEBSHARE_API_KEY');
+    }
 
-    static async init(maxRetries = 99, retryDelay = 5000) {
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                if (proxy_settings.use_webshare) {
-                    this.proxies = await listProxies(proxy_settings.webshare_api_key);
-                    Logger.info(`Loaded ${this.proxies.length} proxies from Webshare.`);
-                } else {
-                    // Read the proxy file
-                    const proxyFile = fs.readFileSync('proxies.txt', 'utf8');
-                    const proxyLines = proxyFile.split('\n');
-
-                    // Parse the proxy lines
-                    for (const line of proxyLines) {
-                        const parts = line.split(':');
-                        if (parts.length === 4) {
-                            const proxy = new Proxy(parts[0], parts[1], parts[2], parts[3]);
-                            this.proxies.push(proxy);
-                        }
-                    }
-                    Logger.info(`Loaded ${this.proxies.length} proxies from file.`);
-                }
-                return;
-            } catch (error) {
-                Logger.error(`Attempt ${attempt + 1} failed to initialize proxies: ${error.message}`);
-                if (attempt === maxRetries - 1) {
-                    Logger.error('Failed to initialize proxies after maximum retries');
-                    throw error;
-                }
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
+    async loadProxies() {
+        try {
+            if (this.isWebshare) {
+                await this.loadWebshareProxies();
+            } else {
+                await this.loadProxyFile();
             }
+            Logger.info(`Loaded ${this.proxies.length} proxies`);
+        } catch (error) {
+            Logger.error('Failed to load proxies:', error);
+            throw error;
         }
     }
 
-    /**
-     * Clears the proxy configuration.
-     */
-    static clearProxy() {
-        this.proxyConfig = null;
-    }
+    async loadWebshareProxies() {
+        try {
+            const response = await fetch('https://proxy.webshare.io/api/proxy/list/', {
+                headers: {
+                    'Authorization': `Token ${this.webshareKey}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch Webshare proxies: ${response.status}`);
+            }
 
-    /**
-     * Retrieves the current proxy agent if a proxy is configured.
-     * @returns {SocksProxyAgent|undefined} The proxy agent or undefined if no proxy is set.
-     */
-    static getNewProxy() {
-
-        if (this.proxies.length > 0) {
-            this.currentProxyIndex = (this.currentProxyIndex + 1) % this.proxies.length;
-
-            const proxy = this.proxies[this.currentProxyIndex];
-
-            return proxy
+            const data = await response.json();
+            this.proxies = data.results.map(proxy => ({
+                host: proxy.proxy_address,
+                port: proxy.ports.http,
+                username: proxy.username,
+                password: proxy.password
+            }));
+        } catch (error) {
+            Logger.error('Webshare API error:', error);
+            throw error;
         }
-        
-        Logger.error('No proxies available.');
-
-        return undefined;
     }
 
-    /** 
-     * Get New Proxy Socks Agent
-     * @param {Proxy} proxy - The proxy to get the agent for
-     * @returns {SocksProxyAgent} - The proxy agent
-     */
-    static getProxyAgent(proxy) {
-        return new SocksProxyAgent(proxy.getProxyString());
-    }
-    
-
-    /** 
-     * Remove invalid proxies from the list
-     * @param {Proxy} proxy - The proxy to remove
-     * @returns {void}
-     */
-    static removeProxy(proxy) {
-        this.proxies = this.proxies.filter(p => p !== proxy);
+    async loadProxyFile() {
+        try {
+            const proxyPath = ConfigurationManager.get('PROXY_LIST_PATH');
+            const content = await fs.readFile(proxyPath, 'utf-8');
+            this.proxies = content.split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'))
+                .map(line => {
+                    const [host, port, username, password] = line.split(':');
+                    return { host, port, username, password };
+                });
+        } catch (error) {
+            Logger.error('Failed to load proxy file:', error);
+            throw error;
+        }
     }
 
+    getNextProxy() {
+        if (this.proxies.length === 0) {
+            throw new Error('No proxies available');
+        }
+        const proxy = this.proxies[this.currentIndex];
+        this.currentIndex = (this.currentIndex + 1) % this.proxies.length;
+        return proxy;
+    }
 
-    static removeTemporarlyInvalidProxy(proxy, timeout = 60000) {
-        this.proxiesOnCooldown.push(proxy);
-        this.proxies = this.proxies.filter(p => p !== proxy);
-
-        setTimeout(() => {
-            this.proxies.push(proxy);
-            this.proxiesOnCooldown = this.proxiesOnCooldown.filter(p => p !== proxy);
-        }, timeout);
+    getProxyUrl() {
+        const proxy = this.getNextProxy();
+        return `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`;
     }
 }
 
-export default ProxyManager;
+export default new ProxyManager();
