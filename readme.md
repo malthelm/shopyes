@@ -1,5 +1,6 @@
 # Vinted Discord Bot
-Test deployment: [current timestamp]
+Test deployment: December 12, 2023 - 19:45
+Status: Testing GitHub Actions Deployment
 
 # Vinted Monitor - No Delay (fyndit Public Bot)
 
