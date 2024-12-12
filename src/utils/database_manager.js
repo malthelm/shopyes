@@ -4,9 +4,11 @@ import Logger from './logger.js';
 class DatabaseManager {
     constructor() {
         this.isConnected = false;
+        this.maxRetries = 5;
+        this.retryDelay = 5000; // 5 seconds
     }
 
-    async connect() {
+    async connect(retryCount = 0) {
         try {
             if (!process.env.MONGODB_URI) {
                 throw new Error('MongoDB URI not found in environment variables');
@@ -14,7 +16,9 @@ class DatabaseManager {
 
             await mongoose.connect(process.env.MONGODB_URI, {
                 useNewUrlParser: true,
-                useUnifiedTopology: true
+                useUnifiedTopology: true,
+                serverSelectionTimeoutMS: 5000,
+                connectTimeoutMS: 10000,
             });
 
             this.isConnected = true;
@@ -22,6 +26,13 @@ class DatabaseManager {
         } catch (error) {
             Logger.error('MongoDB connection error:', error);
             this.isConnected = false;
+
+            if (retryCount < this.maxRetries) {
+                Logger.info(`Retrying connection in ${this.retryDelay/1000} seconds... (Attempt ${retryCount + 1}/${this.maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                return this.connect(retryCount + 1);
+            }
+            
             throw error;
         }
     }
@@ -42,4 +53,4 @@ class DatabaseManager {
     }
 }
 
-export default new DatabaseManager(); 
+export default new DatabaseManager();

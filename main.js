@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import mongoose from 'mongoose';
 import ProxyManager from './src/utils/proxy_manager.js';
 import Logger from './src/utils/logger.js';
+import { initializeDatabase } from './src/database.js';
 
 // Create Discord client with necessary intents
 const client = new Client({
@@ -162,6 +163,14 @@ client.once('ready', async () => {
 
 async function initialize() {
     try {
+        // Initialize database first
+        Logger.info('Initializing database connection...');
+        const dbConnected = await initializeDatabase();
+        if (!dbConnected) {
+            throw new Error('Failed to connect to database');
+        }
+        Logger.info('Database initialized successfully');
+
         // Initialize proxy system
         await ProxyManager.loadProxies();
         Logger.info(`Proxy system initialized successfully`);

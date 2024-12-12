@@ -12,6 +12,12 @@ class ConfigurationManager {
     set(key, value) {
         process.env[key] = value;
     }
+
+    getMongoDBConfig() {
+        return {
+            uri: process.env.MONGODB_URI
+        };
+    }
 }
 
 export default new ConfigurationManager();

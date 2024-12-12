@@ -9,29 +9,43 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
+      - NODE_OPTIONS="--max-old-space-size=512"
     env_file:
       - .env
-    command: sh -c "npm install && npm start"
+    command: sh -c "npm install --production && npm start"
     depends_on:
       - mongodb
     networks:
       - vinted-network
     restart: unless-stopped
-    pull_policy: never
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
 
   mongodb:
+    image: quay.io/mongodb/mongodb-community-server:6.0-ubi8
     container_name: mongodb_vinted_public
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
     environment:
-      - MONGODB_INITDB_ROOT_USERNAME=vintedAdmin
-      - MONGODB_INITDB_ROOT_PASSWORD=yourSecurePassword123
-    ports:
-      - "27018:27018"
+      MONGODB_INITDB_ROOT_USERNAME: vintedAdmin
+      MONGODB_INITDB_ROOT_PASSWORD: yourSecurePassword123
+    command: mongod --port 27018 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --dbpath /data/db
     volumes:
       - mongodb_data_container:/data/db
     networks:
       - vinted-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
 
 networks:
   vinted-network:

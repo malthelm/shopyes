@@ -2,10 +2,37 @@ import mongoose from "mongoose";
 const { Schema, model, Types } = mongoose;
 
 import ConfigurationManager from "./utils/config_manager.js";
-
-const mongoConfig = ConfigurationManager.getMongoDBConfig
-
 import Logger from "./utils/logger.js";
+
+export async function initializeDatabase() {
+    const mongoConfig = ConfigurationManager.getMongoDBConfig();
+    Logger.info(`Attempting to connect to MongoDB with URI: ${mongoConfig.uri}`);
+
+    try {
+        await mongoose.connect(mongoConfig.uri, {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        });
+        Logger.info("Successfully connected to MongoDB");
+        return true;
+    } catch (err) {
+        Logger.error("MongoDB connection error:", err);
+        return false;
+    }
+}
+
+// Add connection event handlers
+mongoose.connection.on('connected', () => {
+    Logger.info('MongoDB connection established');
+});
+
+mongoose.connection.on('error', (err) => {
+    Logger.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    Logger.info('MongoDB disconnected');
+});
 
 var categoryMap = {};
 
@@ -43,12 +70,7 @@ function isSubcategory(parentId, childId) {
     return categoryMap[parentId].includes(childId);
 }
 
-// Connect to MongoDB
-mongoose.connect(mongoConfig.uri)
-    .then(() => Logger.info("Connected to MongoDB."))
-    .catch((err) => Logger.error(err));
-
-    // const preferencesEnum
+// const preferencesEnum
 const Preference = {
     Countries: "countries",
     Language: "language",
