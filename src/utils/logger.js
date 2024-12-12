@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
-
 import ConfigurationManager from './config_manager.js';
 
 const devMode = ConfigurationManager.getDevMode
@@ -24,44 +23,58 @@ class Logger {
         Logger.log('WARN', message, chalk.yellow, true);
     }
 
-    static error(message) {
-        Logger.log('ERROR', message, chalk.red, true);  // Pass `true` to indicate this is an error
+    static error(message, error = null) {
+        Logger.log('ERROR', message, chalk.red, true);
+        if (error) {
+            console.error(chalk.red('Error details:'));
+            console.error(chalk.red('Message:', error.message));
+            console.error(chalk.red('Name:', error.name));
+            console.error(chalk.red('Stack:', error.stack));
+        }
     }
 
-    static debug(message) {
-        if (!devMode) {
-            return;
-        }
-
+    static debug(message, data = null) {
+        if (!devMode) return;
         Logger.log('DEBUG', message, chalk.magenta);
+        if (data) {
+            console.log(chalk.magenta('Debug data:'), data);
+        }
     }
 
     static log(level, message, colorFn, includeSource = false) {
-
         const timestamp = new Date().toISOString();
         const formattedLevel = colorFn(`[${level}]`);
-        let logMessage = `${timestamp} ${formattedLevel}: ${message}`;
-
-        if (includeSource) {
-            // get stack of the message
-            const source = Logger.getCallSource();
-            logMessage += ` [${source}]`;
+        
+        let logMessage;
+        if (typeof message === 'object') {
+            logMessage = `${timestamp} ${formattedLevel}:`;
+            console.log(logMessage);
+            console.log(message);
+        } else {
+            logMessage = `${timestamp} ${formattedLevel}: ${message}`;
+            console.log(logMessage);
         }
 
-        console.log(logMessage);
+        if (includeSource) {
+            const source = Logger.getCallSource();
+            console.log(colorFn(`Source: ${source}`));
+        }
         
         if (dumpLogs) {
             fs.appendFileSync(Logger.logFilePath, `${logMessage}\n`);
+            if (typeof message === 'object') {
+                fs.appendFileSync(Logger.logFilePath, JSON.stringify(message, null, 2) + '\n');
+            }
         }
     }
 
     static getCallSource() {
-        const stack = new Error().stack; // Create an Error and capture the stack
+        const stack = new Error().stack;
         const stackLines = stack.split('\n');
-        let callerLine = stackLines[4]; // Get the relevant caller line from stack; Adjust this number based on where this method is within your stack trace
+        let callerLine = stackLines[4];
 
         if (callerLine) {
-            callerLine = callerLine.replace(/^\s+at\s+/g, ''); // Clean up the stack trace line
+            callerLine = callerLine.replace(/^\s+at\s+/g, '');
             return callerLine;
         }
 
@@ -69,6 +82,6 @@ class Logger {
     }
 }
 
-Logger.initialize(); // Ensure log file is initialized at startup
+Logger.initialize();
 
 export default Logger;

@@ -1,0 +1,58 @@
+name: Deploy to OVH
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        known_hosts: 'placeholder'
+        
+    - name: Add host to known_hosts
+      run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+    # Check which files were changed
+    - name: Get changed files
+      id: changed-files
+      uses: tj-actions/changed-files@v40
+      
+    # For minor changes (like readme, docs, etc)
+    - name: Deploy changed files
+      run: |
+        for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          echo "Processing file: $file"
+          if [[ $file != "Dockerfile" && $file != "docker-compose.yml" && $file != "package.json" && $file != "package-lock.json" ]]; then
+            echo "Copying $file"
+            scp $file ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/debian/vinted-discord-bot-2/$file
+          fi
+        done
+
+    # Only rebuild Docker if important files changed
+    - name: Check if Docker rebuild needed
+      id: check-docker
+      run: |
+        CHANGED_FILES="${{ steps.changed-files.outputs.all_changed_files }}"
+        if echo "$CHANGED_FILES" | grep -qE "Dockerfile|docker-compose\.yml|package\.json|package-lock\.json"; then
+          echo "rebuild_needed=true" >> $GITHUB_OUTPUT
+        else
+          echo "rebuild_needed=false" >> $GITHUB_OUTPUT
+        fi
+
+    # Build and deploy Docker only if necessary
+    - name: Build and Deploy Docker
+      if: steps.check-docker.outputs.rebuild_needed == 'true'
+      run: |
+        echo "Rebuilding Docker container..."
+        docker build . --file Dockerfile --tag vinted-bot:latest
+        echo "Deploying to server..."
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'cd /home/debian/vinted-discord-bot-2 && docker-compose down'
+        docker save vinted-bot:latest | ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'cd /home/debian/vinted-discord-bot-2 && docker load'
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'cd /home/debian/vinted-discord-bot-2 && docker-compose up -d'

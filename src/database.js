@@ -108,11 +108,35 @@ const vintedChannelSchema = new Schema({
     preferences: { type: Map, default: {} },
 });
 
+const searchSchema = new Schema({
+    url: {
+        type: String,
+        required: true
+    },
+    guildId: {
+        type: String,
+        required: true
+    },
+    channelId: {
+        type: String,
+        required: true
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    }
+});
+
 // Create models
 //const Group = model('Group', groupSchema);
 const User = model('User', userSchema);
 const VintedChannel = model('VintedChannel', vintedChannelSchema);
+const Search = model('Search', searchSchema);
 
 Logger.info("Database models loaded.");
 
-export { Preference, ShippableMap, User, VintedChannel, isSubcategory, buildCategoryMapFromRoots };
+export { Preference, ShippableMap, User, VintedChannel, Search as SearchModel, isSubcategory, buildCategoryMapFromRoots };
