@@ -1,3 +1,6 @@
+# Vinted Discord Bot
+Test deployment: [current timestamp]
+
 # Vinted Monitor - No Delay (fyndit Public Bot)
 
 Vinted Monitor is a bot that monitors the Vinted items route for new items and notifies users in real-time. It is designed to work with minimal delay, ensuring that users are always up-to-date with the latest items.
@@ -128,3 +131,5 @@ Click on the image below to look at the tutorial
 <div align="center">
   <a href="https://www.youtube.com/watch?v=5yllNcaQEcU"><img src="https://img.youtube.com/vi/5yllNcaQEcU/0.jpg" alt="IMAGE ALT TEXT"></a>
 </div>
+
+test: verify automatic deployment
