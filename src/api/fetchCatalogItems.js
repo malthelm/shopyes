@@ -13,19 +13,32 @@ const extension = ConfigurationManager.getAlgorithmSetting.vinted_api_domain_ext
  * @param {string} [params.order='newest_first'] - Order of items.
  * @returns {Promise<Object>} - Promise resolving to the fetched catalog items.
  */
-export async function fetchCatalogItems({ cookie, per_page = 96, order = 'newest_first' }) {
-    return await executeWithDetailedHandling(async () => {
-        const url = `https://www.vinted.${extension}/api/v2/catalog/items?per_page=${per_page}&order=${order}`;
-
-        const response = await RequestBuilder.get(url)
-                        .setNextProxy()
-                        .setCookie(cookie)
-                        .send();
-
-        if (!response.success) {
-            throw new NotFoundError("Error fetching catalog items.");
+export async function fetchCatalogItems({ cookie, page = 1, per_page = 20, retries = 3 }) {
+    while (retries > 0) {
+        try {
+            const response = await fetch(`https://www.vinted.fr/api/v2/catalog/items?page=${page}&per_page=${per_page}`, {
+                headers: {
+                    'cookie': cookie
+                },
+                timeout: 5000  // Add 5 second timeout
+            });
+            
+            if (response.ok) {
+                return await response.json();
+            }
+            
+            // Handle rate limits
+            if (response.status === 429) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                retries--;
+                continue;
+            }
+            
+            throw new Error(`HTTP error! status: ${response.status}`);
+        } catch (error) {
+            retries--;
+            if (retries === 0) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
-
-        return { items: response.data.items };
-    });
+    }
 }
